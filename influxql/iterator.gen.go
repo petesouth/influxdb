@@ -452,7 +452,6 @@ type floatFillIterator struct {
 	startTime int64
 	endTime   int64
 	auxFields []interface{}
-	done      bool
 	opt       IteratorOptions
 
 	window struct {
@@ -473,9 +472,9 @@ func newFloatFillIterator(input FloatIterator, expr Expr, opt IteratorOptions) *
 	var startTime, endTime int64
 	if opt.Ascending {
 		startTime, _ = opt.Window(opt.StartTime)
-		_, endTime = opt.Window(opt.EndTime)
+		endTime, _ = opt.Window(opt.EndTime)
 	} else {
-		_, startTime = opt.Window(opt.EndTime)
+		startTime, _ = opt.Window(opt.EndTime)
 		endTime, _ = opt.Window(opt.StartTime)
 	}
 
@@ -497,7 +496,11 @@ func newFloatFillIterator(input FloatIterator, expr Expr, opt IteratorOptions) *
 		itr.window.name, itr.window.tags = p.Name, p.Tags
 		itr.window.time = itr.startTime
 	} else {
-		itr.window.time = itr.endTime
+		if opt.Ascending {
+			itr.window.time = itr.endTime + 1
+		} else {
+			itr.window.time = itr.endTime - 1
+		}
 	}
 	return itr
 }
@@ -513,7 +516,7 @@ func (itr *floatFillIterator) Next() *FloatPoint {
 		// If we are inside of an interval, unread the point and continue below to
 		// constructing a new point.
 		if itr.opt.Ascending {
-			if itr.window.time < itr.endTime {
+			if itr.window.time <= itr.endTime {
 				itr.input.unread(p)
 				p = nil
 				break
@@ -540,7 +543,7 @@ func (itr *floatFillIterator) Next() *FloatPoint {
 	}
 
 	// Check if the point is our next expected point.
-	if p == nil || p.Time > itr.window.time {
+	if p == nil || (itr.opt.Ascending && p.Time > itr.window.time) || (!itr.opt.Ascending && p.Time < itr.window.time) {
 		if p != nil {
 			itr.input.unread(p)
 		}
@@ -787,6 +790,9 @@ type floatReduceFloatIterator struct {
 	create func() (FloatPointAggregator, FloatPointEmitter)
 	opt    IteratorOptions
 	points []FloatPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -832,7 +838,7 @@ func (itr *floatReduceFloatIterator) reduce() []FloatPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -923,6 +929,9 @@ type floatReduceIntegerIterator struct {
 	create func() (FloatPointAggregator, IntegerPointEmitter)
 	opt    IteratorOptions
 	points []IntegerPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -968,7 +977,7 @@ func (itr *floatReduceIntegerIterator) reduce() []IntegerPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -1059,6 +1068,9 @@ type floatReduceStringIterator struct {
 	create func() (FloatPointAggregator, StringPointEmitter)
 	opt    IteratorOptions
 	points []StringPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -1104,7 +1116,7 @@ func (itr *floatReduceStringIterator) reduce() []StringPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -1195,6 +1207,9 @@ type floatReduceBooleanIterator struct {
 	create func() (FloatPointAggregator, BooleanPointEmitter)
 	opt    IteratorOptions
 	points []BooleanPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -1240,7 +1255,7 @@ func (itr *floatReduceBooleanIterator) reduce() []BooleanPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -1906,7 +1921,6 @@ type integerFillIterator struct {
 	startTime int64
 	endTime   int64
 	auxFields []interface{}
-	done      bool
 	opt       IteratorOptions
 
 	window struct {
@@ -1927,9 +1941,9 @@ func newIntegerFillIterator(input IntegerIterator, expr Expr, opt IteratorOption
 	var startTime, endTime int64
 	if opt.Ascending {
 		startTime, _ = opt.Window(opt.StartTime)
-		_, endTime = opt.Window(opt.EndTime)
+		endTime, _ = opt.Window(opt.EndTime)
 	} else {
-		_, startTime = opt.Window(opt.EndTime)
+		startTime, _ = opt.Window(opt.EndTime)
 		endTime, _ = opt.Window(opt.StartTime)
 	}
 
@@ -1951,7 +1965,11 @@ func newIntegerFillIterator(input IntegerIterator, expr Expr, opt IteratorOption
 		itr.window.name, itr.window.tags = p.Name, p.Tags
 		itr.window.time = itr.startTime
 	} else {
-		itr.window.time = itr.endTime
+		if opt.Ascending {
+			itr.window.time = itr.endTime + 1
+		} else {
+			itr.window.time = itr.endTime - 1
+		}
 	}
 	return itr
 }
@@ -1967,7 +1985,7 @@ func (itr *integerFillIterator) Next() *IntegerPoint {
 		// If we are inside of an interval, unread the point and continue below to
 		// constructing a new point.
 		if itr.opt.Ascending {
-			if itr.window.time < itr.endTime {
+			if itr.window.time <= itr.endTime {
 				itr.input.unread(p)
 				p = nil
 				break
@@ -1994,7 +2012,7 @@ func (itr *integerFillIterator) Next() *IntegerPoint {
 	}
 
 	// Check if the point is our next expected point.
-	if p == nil || p.Time > itr.window.time {
+	if p == nil || (itr.opt.Ascending && p.Time > itr.window.time) || (!itr.opt.Ascending && p.Time < itr.window.time) {
 		if p != nil {
 			itr.input.unread(p)
 		}
@@ -2238,6 +2256,9 @@ type integerReduceFloatIterator struct {
 	create func() (IntegerPointAggregator, FloatPointEmitter)
 	opt    IteratorOptions
 	points []FloatPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -2283,7 +2304,7 @@ func (itr *integerReduceFloatIterator) reduce() []FloatPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -2374,6 +2395,9 @@ type integerReduceIntegerIterator struct {
 	create func() (IntegerPointAggregator, IntegerPointEmitter)
 	opt    IteratorOptions
 	points []IntegerPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -2419,7 +2443,7 @@ func (itr *integerReduceIntegerIterator) reduce() []IntegerPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -2510,6 +2534,9 @@ type integerReduceStringIterator struct {
 	create func() (IntegerPointAggregator, StringPointEmitter)
 	opt    IteratorOptions
 	points []StringPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -2555,7 +2582,7 @@ func (itr *integerReduceStringIterator) reduce() []StringPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -2646,6 +2673,9 @@ type integerReduceBooleanIterator struct {
 	create func() (IntegerPointAggregator, BooleanPointEmitter)
 	opt    IteratorOptions
 	points []BooleanPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -2691,7 +2721,7 @@ func (itr *integerReduceBooleanIterator) reduce() []BooleanPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -3357,7 +3387,6 @@ type stringFillIterator struct {
 	startTime int64
 	endTime   int64
 	auxFields []interface{}
-	done      bool
 	opt       IteratorOptions
 
 	window struct {
@@ -3378,9 +3407,9 @@ func newStringFillIterator(input StringIterator, expr Expr, opt IteratorOptions)
 	var startTime, endTime int64
 	if opt.Ascending {
 		startTime, _ = opt.Window(opt.StartTime)
-		_, endTime = opt.Window(opt.EndTime)
+		endTime, _ = opt.Window(opt.EndTime)
 	} else {
-		_, startTime = opt.Window(opt.EndTime)
+		startTime, _ = opt.Window(opt.EndTime)
 		endTime, _ = opt.Window(opt.StartTime)
 	}
 
@@ -3402,7 +3431,11 @@ func newStringFillIterator(input StringIterator, expr Expr, opt IteratorOptions)
 		itr.window.name, itr.window.tags = p.Name, p.Tags
 		itr.window.time = itr.startTime
 	} else {
-		itr.window.time = itr.endTime
+		if opt.Ascending {
+			itr.window.time = itr.endTime + 1
+		} else {
+			itr.window.time = itr.endTime - 1
+		}
 	}
 	return itr
 }
@@ -3418,7 +3451,7 @@ func (itr *stringFillIterator) Next() *StringPoint {
 		// If we are inside of an interval, unread the point and continue below to
 		// constructing a new point.
 		if itr.opt.Ascending {
-			if itr.window.time < itr.endTime {
+			if itr.window.time <= itr.endTime {
 				itr.input.unread(p)
 				p = nil
 				break
@@ -3445,7 +3478,7 @@ func (itr *stringFillIterator) Next() *StringPoint {
 	}
 
 	// Check if the point is our next expected point.
-	if p == nil || p.Time > itr.window.time {
+	if p == nil || (itr.opt.Ascending && p.Time > itr.window.time) || (!itr.opt.Ascending && p.Time < itr.window.time) {
 		if p != nil {
 			itr.input.unread(p)
 		}
@@ -3689,6 +3722,9 @@ type stringReduceFloatIterator struct {
 	create func() (StringPointAggregator, FloatPointEmitter)
 	opt    IteratorOptions
 	points []FloatPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -3734,7 +3770,7 @@ func (itr *stringReduceFloatIterator) reduce() []FloatPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -3825,6 +3861,9 @@ type stringReduceIntegerIterator struct {
 	create func() (StringPointAggregator, IntegerPointEmitter)
 	opt    IteratorOptions
 	points []IntegerPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -3870,7 +3909,7 @@ func (itr *stringReduceIntegerIterator) reduce() []IntegerPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -3961,6 +4000,9 @@ type stringReduceStringIterator struct {
 	create func() (StringPointAggregator, StringPointEmitter)
 	opt    IteratorOptions
 	points []StringPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -4006,7 +4048,7 @@ func (itr *stringReduceStringIterator) reduce() []StringPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -4097,6 +4139,9 @@ type stringReduceBooleanIterator struct {
 	create func() (StringPointAggregator, BooleanPointEmitter)
 	opt    IteratorOptions
 	points []BooleanPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -4142,7 +4187,7 @@ func (itr *stringReduceBooleanIterator) reduce() []BooleanPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -4808,7 +4853,6 @@ type booleanFillIterator struct {
 	startTime int64
 	endTime   int64
 	auxFields []interface{}
-	done      bool
 	opt       IteratorOptions
 
 	window struct {
@@ -4829,9 +4873,9 @@ func newBooleanFillIterator(input BooleanIterator, expr Expr, opt IteratorOption
 	var startTime, endTime int64
 	if opt.Ascending {
 		startTime, _ = opt.Window(opt.StartTime)
-		_, endTime = opt.Window(opt.EndTime)
+		endTime, _ = opt.Window(opt.EndTime)
 	} else {
-		_, startTime = opt.Window(opt.EndTime)
+		startTime, _ = opt.Window(opt.EndTime)
 		endTime, _ = opt.Window(opt.StartTime)
 	}
 
@@ -4853,7 +4897,11 @@ func newBooleanFillIterator(input BooleanIterator, expr Expr, opt IteratorOption
 		itr.window.name, itr.window.tags = p.Name, p.Tags
 		itr.window.time = itr.startTime
 	} else {
-		itr.window.time = itr.endTime
+		if opt.Ascending {
+			itr.window.time = itr.endTime + 1
+		} else {
+			itr.window.time = itr.endTime - 1
+		}
 	}
 	return itr
 }
@@ -4869,7 +4917,7 @@ func (itr *booleanFillIterator) Next() *BooleanPoint {
 		// If we are inside of an interval, unread the point and continue below to
 		// constructing a new point.
 		if itr.opt.Ascending {
-			if itr.window.time < itr.endTime {
+			if itr.window.time <= itr.endTime {
 				itr.input.unread(p)
 				p = nil
 				break
@@ -4896,7 +4944,7 @@ func (itr *booleanFillIterator) Next() *BooleanPoint {
 	}
 
 	// Check if the point is our next expected point.
-	if p == nil || p.Time > itr.window.time {
+	if p == nil || (itr.opt.Ascending && p.Time > itr.window.time) || (!itr.opt.Ascending && p.Time < itr.window.time) {
 		if p != nil {
 			itr.input.unread(p)
 		}
@@ -5140,6 +5188,9 @@ type booleanReduceFloatIterator struct {
 	create func() (BooleanPointAggregator, FloatPointEmitter)
 	opt    IteratorOptions
 	points []FloatPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -5185,7 +5236,7 @@ func (itr *booleanReduceFloatIterator) reduce() []FloatPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -5276,6 +5327,9 @@ type booleanReduceIntegerIterator struct {
 	create func() (BooleanPointAggregator, IntegerPointEmitter)
 	opt    IteratorOptions
 	points []IntegerPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -5321,7 +5375,7 @@ func (itr *booleanReduceIntegerIterator) reduce() []IntegerPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -5412,6 +5466,9 @@ type booleanReduceStringIterator struct {
 	create func() (BooleanPointAggregator, StringPointEmitter)
 	opt    IteratorOptions
 	points []StringPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -5457,7 +5514,7 @@ func (itr *booleanReduceStringIterator) reduce() []StringPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
@@ -5548,6 +5605,9 @@ type booleanReduceBooleanIterator struct {
 	create func() (BooleanPointAggregator, BooleanPointEmitter)
 	opt    IteratorOptions
 	points []BooleanPoint
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -5593,7 +5653,7 @@ func (itr *booleanReduceBooleanIterator) reduce() []BooleanPoint {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)

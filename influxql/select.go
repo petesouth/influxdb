@@ -224,6 +224,13 @@ func buildExprIterator(expr Expr, ic IteratorCreator, opt IteratorOptions) (Iter
 			}
 			return NewIntervalIterator(input, opt), nil
 		case "derivative", "non_negative_derivative":
+			if !opt.Interval.IsZero() {
+				if opt.Ascending {
+					opt.StartTime -= int64(opt.Interval.Duration)
+				} else {
+					opt.EndTime += int64(opt.Interval.Duration)
+				}
+			}
 			input, err := buildExprIterator(expr.Args[0], ic, opt)
 			if err != nil {
 				return nil, err

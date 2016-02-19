@@ -451,7 +451,6 @@ type {{$k.name}}FillIterator struct {
 	startTime int64
 	endTime   int64
 	auxFields []interface{}
-	done      bool
 	opt       IteratorOptions
 
 	window struct {
@@ -472,9 +471,9 @@ func new{{$k.Name}}FillIterator(input {{$k.Name}}Iterator, expr Expr, opt Iterat
 	var startTime, endTime int64
 	if opt.Ascending {
 		startTime, _ = opt.Window(opt.StartTime)
-		_, endTime = opt.Window(opt.EndTime)
+		endTime, _ = opt.Window(opt.EndTime)
 	} else {
-		_, startTime = opt.Window(opt.EndTime)
+		startTime, _ = opt.Window(opt.EndTime)
 		endTime, _ = opt.Window(opt.StartTime)
 	}
 
@@ -496,7 +495,11 @@ func new{{$k.Name}}FillIterator(input {{$k.Name}}Iterator, expr Expr, opt Iterat
 		itr.window.name, itr.window.tags = p.Name, p.Tags
 		itr.window.time = itr.startTime
 	} else {
-		itr.window.time = itr.endTime
+		if opt.Ascending {
+			itr.window.time = itr.endTime + 1
+		} else {
+			itr.window.time = itr.endTime - 1
+		}
 	}
 	return itr
 }
@@ -512,7 +515,7 @@ func (itr *{{$k.name}}FillIterator) Next() *{{$k.Name}}Point {
 		// If we are inside of an interval, unread the point and continue below to
 		// constructing a new point.
 		if itr.opt.Ascending {
-			if itr.window.time < itr.endTime {
+			if itr.window.time <= itr.endTime {
 				itr.input.unread(p)
 				p = nil
 				break
@@ -539,7 +542,7 @@ func (itr *{{$k.name}}FillIterator) Next() *{{$k.Name}}Point {
 	}
 
 	// Check if the point is our next expected point.
-	if p == nil || p.Time > itr.window.time {
+	if p == nil || (itr.opt.Ascending && p.Time > itr.window.time) || (!itr.opt.Ascending && p.Time < itr.window.time) {
 		if p != nil {
 			itr.input.unread(p)
 		}
@@ -784,10 +787,13 @@ func (itr *{{$k.name}}ChanIterator) Next() *{{$k.Name}}Point {
 
 // {{$k.name}}Reduce{{$v.Name}}Iterator executes a reducer for every interval and buffers the result.
 type {{$k.name}}Reduce{{$v.Name}}Iterator struct {
-	input  *buf{{$k.Name}}Iterator
-	create func() ({{$k.Name}}PointAggregator, {{$v.Name}}PointEmitter)
-	opt    IteratorOptions
-	points []{{$v.Name}}Point
+	input    *buf{{$k.Name}}Iterator
+	create   func() ({{$k.Name}}PointAggregator, {{$v.Name}}PointEmitter)
+	opt      IteratorOptions
+	points   []{{$v.Name}}Point
+	// Send nil points to the aggregator if true.
+	// Otherwise, nil points are filtered out before being sent to the aggregator.
+	allowNil bool
 }
 
 // Stats returns stats from the input iterator.
@@ -833,11 +839,11 @@ func (itr *{{$k.name}}Reduce{{$v.Name}}Iterator) reduce() []{{$v.Name}}Point {
 		curr := itr.input.NextInWindow(startTime, endTime)
 		if curr == nil {
 			break
-		} else if curr.Nil {
+		} else if curr.Nil && !itr.allowNil {
 			continue
 		}
 		tags := curr.Tags.Subset(itr.opt.Dimensions)
-		
+
 		id := curr.Name
 		if len(tags.m) > 0 {
 			id += "\x00" + tags.ID()

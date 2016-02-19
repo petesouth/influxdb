@@ -1011,26 +1011,26 @@ func NewIntegerPercentileReduceSliceFunc(percentile float64) IntegerReduceSliceF
 func newDerivativeIterator(input Iterator, opt IteratorOptions, interval Interval, isNonNegative bool) (Iterator, error) {
 	switch input := input.(type) {
 	case FloatIterator:
-		floatDerivativeReduceSlice := NewFloatDerivativeReduceSliceFunc(interval, isNonNegative)
+		floatDerivativeReduceSlice := NewFloatDerivativeReduceSliceFunc(interval, isNonNegative, opt.Ascending)
 		createFn := func() (FloatPointAggregator, FloatPointEmitter) {
 			fn := NewFloatSliceFuncReducer(floatDerivativeReduceSlice)
 			return fn, fn
 		}
-		return &floatReduceFloatIterator{input: newBufFloatIterator(input), opt: opt, create: createFn}, nil
+		return &floatReduceFloatIterator{input: newBufFloatIterator(input), opt: opt, create: createFn, allowNil: true}, nil
 	case IntegerIterator:
-		integerDerivativeReduceSlice := NewIntegerDerivativeReduceSliceFunc(interval, isNonNegative)
+		integerDerivativeReduceSlice := NewIntegerDerivativeReduceSliceFunc(interval, isNonNegative, opt.Ascending)
 		createFn := func() (IntegerPointAggregator, FloatPointEmitter) {
 			fn := NewIntegerSliceFuncFloatReducer(integerDerivativeReduceSlice)
 			return fn, fn
 		}
-		return &integerReduceFloatIterator{input: newBufIntegerIterator(input), opt: opt, create: createFn}, nil
+		return &integerReduceFloatIterator{input: newBufIntegerIterator(input), opt: opt, create: createFn, allowNil: true}, nil
 	default:
 		return nil, fmt.Errorf("unsupported derivative iterator type: %T", input)
 	}
 }
 
 // NewFloatDerivativeReduceSliceFunc returns the derivative value within a window.
-func NewFloatDerivativeReduceSliceFunc(interval Interval, isNonNegative bool) FloatReduceSliceFunc {
+func NewFloatDerivativeReduceSliceFunc(interval Interval, isNonNegative, ascending bool) FloatReduceSliceFunc {
 	prev := FloatPoint{Nil: true}
 
 	return func(a []FloatPoint) []FloatPoint {
@@ -1039,19 +1039,22 @@ func NewFloatDerivativeReduceSliceFunc(interval Interval, isNonNegative bool) Fl
 		} else if len(a) == 1 {
 			return []FloatPoint{{Time: a[0].Time, Nil: true}}
 		}
-
-		if prev.Nil {
-			prev = a[0]
-		}
+		prev = a[0]
 
 		output := make([]FloatPoint, 0, len(a)-1)
 		for i := 1; i < len(a); i++ {
 			p := &a[i]
+			if p.Nil {
+				continue
+			}
 
 			// Calculate the derivative of successive points by dividing the
 			// difference of each value by the elapsed time normalized to the interval.
 			diff := p.Value - prev.Value
 			elapsed := p.Time - prev.Time
+			if !ascending {
+				elapsed = -elapsed
+			}
 
 			value := 0.0
 			if elapsed > 0 {
@@ -1072,7 +1075,7 @@ func NewFloatDerivativeReduceSliceFunc(interval Interval, isNonNegative bool) Fl
 }
 
 // NewIntegerDerivativeReduceSliceFunc returns the derivative value within a window.
-func NewIntegerDerivativeReduceSliceFunc(interval Interval, isNonNegative bool) IntegerReduceFloatSliceFunc {
+func NewIntegerDerivativeReduceSliceFunc(interval Interval, isNonNegative, ascending bool) IntegerReduceFloatSliceFunc {
 	prev := IntegerPoint{Nil: true}
 
 	return func(a []IntegerPoint) []FloatPoint {
@@ -1081,19 +1084,22 @@ func NewIntegerDerivativeReduceSliceFunc(interval Interval, isNonNegative bool) 
 		} else if len(a) == 1 {
 			return []FloatPoint{{Time: a[0].Time, Nil: true}}
 		}
-
-		if prev.Nil {
-			prev = a[0]
-		}
+		prev = a[0]
 
 		output := make([]FloatPoint, 0, len(a)-1)
 		for i := 1; i < len(a); i++ {
 			p := &a[i]
+			if p.Nil {
+				continue
+			}
 
 			// Calculate the derivative of successive points by dividing the
 			// difference of each value by the elapsed time normalized to the interval.
 			diff := float64(p.Value - prev.Value)
 			elapsed := p.Time - prev.Time
+			if !ascending {
+				elapsed = -elapsed
+			}
 
 			value := 0.0
 			if elapsed > 0 {
