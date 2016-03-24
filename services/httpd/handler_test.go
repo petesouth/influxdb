@@ -113,7 +113,9 @@ func TestHandler_Query_Chunked(t *testing.T) {
 	h.ServeHTTP(w, MustNewJSONRequest("GET", "/query?db=foo&q=SELECT+*+FROM+bar&chunked=true&chunk_size=2", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d", w.Code)
-	} else if w.Body.String() != `{"results":[{"series":[{"name":"series0"}]}]}{"results":[{"series":[{"name":"series1"}]}]}` {
+	} else if w.Body.String() != `{"results":[{"series":[{"name":"series0"}]}]}
+{"results":[{"series":[{"name":"series1"}]}]}
+` {
 		t.Fatalf("unexpected body: %s", w.Body.String())
 	}
 }

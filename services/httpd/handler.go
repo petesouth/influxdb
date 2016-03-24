@@ -26,11 +26,10 @@ import (
 )
 
 const (
-	// DefaultChunkSize specifies the amount of data mappers will read
-	// up to, before sending results back to the engine. This is the
-	// default size in the number of values returned in a raw query.
+	// DefaultChunkSize specifies the maximum number of points that will
+	// be read before sending results back to the engine.
 	//
-	// Could be many more bytes depending on fields returned.
+	// This has no relation to the number of bytes that are returned.
 	DefaultChunkSize = 10000
 )
 
@@ -283,7 +282,7 @@ func (h *Handler) serveQuery(w http.ResponseWriter, r *http.Request, user *meta.
 	chunked := (q.Get("chunked") == "true")
 	chunkSize := DefaultChunkSize
 	if chunked {
-		if n, err := strconv.ParseInt(q.Get("chunk_size"), 10, 64); err == nil {
+		if n, err := strconv.ParseInt(q.Get("chunk_size"), 10, 64); err == nil && int(n) > 0 {
 			chunkSize = int(n)
 		}
 	}
@@ -327,6 +326,9 @@ func (h *Handler) serveQuery(w http.ResponseWriter, r *http.Request, user *meta.
 			n, _ := w.Write(MarshalJSON(Response{
 				Results: []*influxql.Result{r},
 			}, pretty))
+			if !pretty {
+				w.Write([]byte("\n"))
+			}
 			h.statMap.Add(statQueryRequestBytesTransmitted, int64(n))
 			w.(http.Flusher).Flush()
 			continue
