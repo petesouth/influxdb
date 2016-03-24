@@ -55,10 +55,10 @@ func (r *IntegerMeanReducer) Emit() []FloatPoint {
 }
 
 type FloatMovingAverageReducer struct {
-	pos    int
-	sum    float64
-	buf    []float64
-	points []FloatPoint
+	pos  int
+	sum  float64
+	time int64
+	buf  []float64
 }
 
 func NewFloatMovingAverageReducer(n int) *FloatMovingAverageReducer {
@@ -75,26 +75,31 @@ func (r *FloatMovingAverageReducer) AggregateFloat(p *FloatPoint) {
 		r.buf[r.pos] = p.Value
 	}
 	r.sum += p.Value
-	r.pos = (r.pos + 1) % cap(r.buf)
-
-	if len(r.buf) == cap(r.buf) {
-		r.points = append(r.points, FloatPoint{
-			Value:      r.sum / float64(len(r.buf)),
-			Time:       p.Time,
-			Aggregated: uint32(len(r.buf)),
-		})
+	r.time = p.Time
+	r.pos++
+	if r.pos >= cap(r.buf) {
+		r.pos = 0
 	}
 }
 
 func (r *FloatMovingAverageReducer) Emit() []FloatPoint {
-	return r.points
+	if len(r.buf) != cap(r.buf) {
+		return []FloatPoint{}
+	}
+	return []FloatPoint{
+		{
+			Value:      r.sum / float64(len(r.buf)),
+			Time:       r.time,
+			Aggregated: uint32(len(r.buf)),
+		},
+	}
 }
 
 type IntegerMovingAverageReducer struct {
-	pos    int
-	sum    int64
-	buf    []int64
-	points []FloatPoint
+	pos  int
+	sum  int64
+	time int64
+	buf  []int64
 }
 
 func NewIntegerMovingAverageReducer(n int) *IntegerMovingAverageReducer {
@@ -111,17 +116,19 @@ func (r *IntegerMovingAverageReducer) AggregateInteger(p *IntegerPoint) {
 		r.buf[r.pos] = p.Value
 	}
 	r.sum += p.Value
+	r.time = p.Time
 	r.pos = (r.pos + 1) % cap(r.buf)
-
-	if len(r.buf) == cap(r.buf) {
-		r.points = append(r.points, FloatPoint{
-			Value:      float64(r.sum) / float64(len(r.buf)),
-			Time:       p.Time,
-			Aggregated: uint32(len(r.buf)),
-		})
-	}
 }
 
 func (r *IntegerMovingAverageReducer) Emit() []FloatPoint {
-	return r.points
+	if len(r.buf) != cap(r.buf) {
+		return []FloatPoint{}
+	}
+	return []FloatPoint{
+		{
+			Value:      float64(r.sum) / float64(len(r.buf)),
+			Time:       r.time,
+			Aggregated: uint32(len(r.buf)),
+		},
+	}
 }

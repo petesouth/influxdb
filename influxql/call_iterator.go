@@ -1180,23 +1180,19 @@ func IntegerDifferenceReduceSlice(a []IntegerPoint) []IntegerPoint {
 }
 
 func newMovingAverageIterator(input Iterator, n int, opt IteratorOptions) (Iterator, error) {
-	// Moving averages do not use GROUP BY intervals or time constraints, so clear these options.
-	opt.Interval = Interval{}
-	opt.StartTime, opt.EndTime = MinTime, MaxTime
-
 	switch input := input.(type) {
 	case FloatIterator:
 		createFn := func() (FloatPointAggregator, FloatPointEmitter) {
 			fn := NewFloatMovingAverageReducer(n)
 			return fn, fn
 		}
-		return &floatReduceFloatIterator{input: newBufFloatIterator(input), opt: opt, create: createFn}, nil
+		return newFloatStreamFloatIterator(input, createFn, opt), nil
 	case IntegerIterator:
 		createFn := func() (IntegerPointAggregator, FloatPointEmitter) {
 			fn := NewIntegerMovingAverageReducer(n)
 			return fn, fn
 		}
-		return &integerReduceFloatIterator{input: newBufIntegerIterator(input), opt: opt, create: createFn}, nil
+		return newIntegerStreamFloatIterator(input, createFn, opt), nil
 	default:
 		return nil, fmt.Errorf("unsupported moving average iterator type: %T", input)
 	}
